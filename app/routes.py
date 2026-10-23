@@ -192,15 +192,68 @@ def remove_watchlist(watch_id):
 
 @api.get("/alerts")
 def get_alerts():
-    query = Alert.query.order_by(Alert.created_at.desc(), Alert.id.desc())
-    unread_only = request.args.get("unread_only", "false").lower() == "true"
-    if unread_only:
-        query = query.filter_by(is_read=False)
-    limit = min(max(request.args.get("limit", 50, type=int) or 50, 1), 200)
-    alerts = query.limit(limit).all()
-    return jsonify({"items": [alert.to_dict() for alert in alerts],
-                    "unread_count": Alert.query.filter_by(is_read=False).count()})
+    try:
+        unread_only = (
+            request.args.get("unread_only", "false").lower() == "true"
+        )
+        limit = min(
+            max(request.args.get("limit", 50, type=int) or 50, 1),
+            200,
+        )
 
+        stmt = db.select(
+            Alert.id,
+            Alert.watchlist_id,
+            Alert.channel_url,
+            Alert.alert_type,
+            Alert.message,
+            Alert.payload,
+            Alert.is_read,
+            Alert.created_at,
+        )
+
+        if unread_only:
+            stmt = stmt.where(Alert.is_read.is_(False))
+
+        stmt = stmt.order_by(
+            Alert.created_at.desc(),
+            Alert.id.desc(),
+        ).limit(limit)
+
+        rows = db.session.execute(stmt).mappings().all()
+
+        unread_count = db.session.execute(
+            db.select(db.func.count(Alert.id)).where(
+                Alert.is_read.is_(False)
+            )
+        ).scalar_one()
+
+        items = [
+            {
+                "id": row["id"],
+                "watchlist_id": row["watchlist_id"],
+                "channel_url": row["channel_url"],
+                "type": row["alert_type"],
+                "message": row["message"],
+                "payload": row["payload"] or {},
+                "is_read": row["is_read"],
+                "created_at": (
+                    row["created_at"].isoformat()
+                    if row["created_at"] else None
+                ),
+            }
+            for row in rows
+        ]
+
+        return jsonify({
+            "items": items,
+            "unread_count": unread_count,
+        })
+
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Unable to retrieve alerts")
+        return jsonify({"error": "Unable to retrieve alerts"}), 500
 
 @api.post("/alerts/<int:alert_id>/read")
 def mark_alert_read(alert_id):
