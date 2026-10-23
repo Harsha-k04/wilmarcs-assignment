@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: wilmarcs-video-intelligence-api
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn run:app --workers 1 --threads 4 --timeout 120
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: YOUTUBE_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
+      - key: GEMINI_TIMEOUT_MS
+        value: "45000"
+      - key: CORS_ORIGINS
+        sync: false
+      - key: ENABLE_WATCHLIST_SCHEDULER
+        value: "true"
+      - key: WATCHLIST_POLL_SECONDS
+        value: "60"
